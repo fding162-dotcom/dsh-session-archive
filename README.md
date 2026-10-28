@@ -29,7 +29,7 @@ DSH 的会话是独立的：开一个新会话，它不知道自己之前在哪�
 
 ```bash
 # 1) 拿到插件（放到任意位置）
-git clone <本仓库地址> ~/plugins/dsh-session-archive
+git clone https://github.com/fding162-dotcom/dsh-session-archive.git ~/plugins/dsh-session-archive
 
 # 2) 备份 profile
 cp ~/.dsh/profiles/desktop/package.json ~/.dsh/profiles/desktop/package.json.bak
