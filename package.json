@@ -21,7 +21,8 @@
     "read_session.mjs",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "install.ps1"
   ],
   "engines": {
     "node": ">=22.15"
