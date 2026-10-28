@@ -328,7 +328,9 @@ function buildTool(config = {}) {
         if (!v.ok) return text(`会话档案：${v.error || '失败'}`)
         if (v.action === 'list') {
           const lines = [`本工作区共 ${v.sessions.length} 个会话（按最后活动倒序，★ 是最新的那个）：`]
-          v.sessions.forEach((s, i) => {
+          const shownList = v.sessions.slice(0, 50)
+          if (v.sessions.length > 50) lines.push(`（只列最近 50 个；还有 ${v.sessions.length - 50} 个没列，用 search 直接搜关键词）`)
+          shownList.forEach((s, i) => {
             const star = i === 0 ? '★ ' : '  '
             const created = s.createdAt ? `开于 ${fmtTime(s.createdAt)}` : '开于 ?'
             const tail = s.lines ? ` · ${s.lines} 条事件` : ''
@@ -345,7 +347,7 @@ function buildTool(config = {}) {
           L.push(`最早的会话开于 ${fmtTime(s.oldestStart)}，最近活动 ${fmtTime(s.newestMtime)}`)
           L.push('')
           L.push('最近几天：')
-          for (const d of s.byDay) L.push(`  ${d.day}  ${d.sessions} 个会话 · ${d.events} 条事件`)
+          for (const d of s.byDay.slice(-14)) L.push(`  ${d.day}  ${d.sessions} 个会话 · ${d.events} 条事件`)
           L.push('')
           L.push('最大的 5 个会话：')
           for (const b of s.biggest) L.push(`  ${b.id}  ${b.lines ?? '?'} 条事件 · ${fmtSize(b.size)}`)
@@ -406,7 +408,9 @@ function buildTool(config = {}) {
         }
         if (v.action === 'search') {
           const L = [`关键词「${v.query}」在 ${v.scanned} 个会话里命中 ${v.hits.length} 处${v.withContext ? `（前后各 ${v.withContext} 条）` : ''}：`]
-          for (const h of v.hits) {
+          const shownHits = v.hits.slice(0, 30)
+          if (v.hits.length > 30) L.push(`（只列前 30 处；还有 ${v.hits.length - 30} 处，缩窄关键词或加 maxSessions）`)
+          for (const h of shownHits) {
             L.push(`  [${h.sessionId} turn ${h.turn}] (${h.role}) ${oneLine(h.text, 180)}`)
             if (h.before) for (const b of h.before) L.push(`      ← ${b.role}：${oneLine(b.text, 100)}`)
             if (h.after) for (const a of h.after) L.push(`      → ${a.role}：${oneLine(a.text, 100)}`)
