@@ -62,7 +62,7 @@ ln -s /绝对路径/plugins/dsh-session-archive ~/.dsh/profiles/desktop/node_mod
 
 重启 DSH 生效。
 
-> **依赖的 node 从哪来**：默认用 DSH 自己的进程（`process.execPath`），不需要系统 PATH 里有 node。只有在配置里写了 `nodePath` 才改用它。
+> **需要系统里有 Node.js（22.15 及以上）**。DSH 是 Electron 打包的，它自己的运行时不能直接跑脚本——插件会依次找：配置里的 `nodePath` → PATH 里的 `node` → 常见安装位置（Windows 的 Program Files / LocalAppData）。都找不到时会退回「只解第一帧」的兜底，并在结果里明确警告。
 
 > **工作区怎么定**：默认用当前进程的 cwd；想固定到某个目录，在 `cordis.patch.yml` 里填 `workspace`。如果那个目录在 `~/.dsh/sessions` 下找不到对应会话，插件会退回列出**所有**工作区的会话，并在返回里说明——这是为了防止路径写错时完全没线索。
 

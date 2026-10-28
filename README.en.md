@@ -47,7 +47,7 @@ ln -s /absolute/path/to/plugins/dsh-session-archive ~/.dsh/profiles/desktop/node
 
 Restart DSH.
 
-> **No dependency on `node` in your PATH** — the decoder is spawned with DSH's own process (`process.execPath`).
+> **Requires Node.js 22.15+ on your system.** DSH ships as an Electron app and its own runtime cannot execute scripts directly, so the plugin looks for `nodePath` in config, then `node` in PATH, then common install locations. If none is found it falls back to a single-frame decoder and says so clearly in the result.
 > **Workspace** defaults to the current process cwd. If the target workspace directory is not found under `~/.dsh/sessions`, the plugin falls back to listing **all** workspaces and says so — better than giving you no clue.
 
 ## The six actions

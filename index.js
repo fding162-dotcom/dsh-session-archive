@@ -107,6 +107,29 @@ function shortCount(reasoning) {
   return n
 }
 
+
+/** 找一个能跑脚本的 node：
+ *  - Electron 打包的 DSH 里 process.execPath 是 "DeepSeek Harness.exe"，拿它跑脚本只会再开一个 DSH，
+ *    所以只有 basename 确实是 node 时才用它；否则走 PATH / 常见安装位置。
+ */
+let cachedNodePath = null
+function resolveNodePath(config = {}) {
+  if (config.nodePath) return config.nodePath
+  if (cachedNodePath) return cachedNodePath
+  const exe = process.execPath || ''
+  const base = path.basename(exe).toLowerCase()
+  if (base === 'node' || base === 'node.exe') return (cachedNodePath = exe)
+  const cands = ['C:/Program Files/nodejs/node.exe',
+                 'C:/Program Files (x86)/nodejs/node.exe',
+                 path.join(process.env.LOCALAPPDATA || '', 'Programs', 'nodejs', 'node.exe'),
+                 'D:/node',
+                 'C:/node/node.exe']
+  for (const c of cands) {
+    try { if (c && fs.existsSync(c) && fs.statSync(c).isFile()) return (cachedNodePath = c) } catch {}
+  }
+  return (cachedNodePath = 'node')
+}
+
 /** 读到几乎空的会话时明确提示：可能是刚创建，或者 DSH 正在重写这个文件 */
 function sparseTip(d) {
   if (!d || typeof d.lines !== 'number') return d
@@ -125,7 +148,7 @@ function loadSession(file, config = {}) {
   const st = fs.statSync(file)
   if (st.size > MAX_COMPRESSED) throw new Error(`会话压缩包 ${fmtSize(st.size)} 超过上限 ${fmtSize(MAX_COMPRESSED)}`)
 
-  const nodePath = config.nodePath || process.execPath || 'node'
+  const nodePath = resolveNodePath(config)
   const helper = path.join(HERE, 'read_session.mjs')
   if (fs.existsSync(helper)) {
     const r = spawnSync(nodePath, [helper, file], {
@@ -232,7 +255,7 @@ function pickSession(sessions, sessionId, self) {
 /** 批量读会话头（创建时间 / 事件数）：一次 spawn 处理多个文件 */
 function readHeads(files, config = {}) {
   if (!files.length) return []
-  const nodePath = config.nodePath || process.execPath || 'node'
+  const nodePath = resolveNodePath(config)
   const helper = path.join(HERE, 'read_session.mjs')
   // 分批 spawn：几百个会话一次性塞进命令行会撞上 Windows 命令行长度上限，
   // 那样整批都会失败，所有会话的时间/条数就全空了。
