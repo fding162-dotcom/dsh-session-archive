@@ -403,6 +403,67 @@ function renderTimelineBrief(tl) {
   }).join('\n\n')
 }
 
+// 从交接目录里捞「还欠着的事」：最新几份 handoff 的小标题 + 带待办关键词的行。
+// 为什么要有它：只告诉新会话「上一句在说啥」不够——真正丢的是「还欠着什么」，
+// 那东西是上一次收工写在 handoff 里的，不主动翻就永远看不到。
+// 通用设计：目录、份数、行数都能配置；只读不写，不假设任何人设或项目结构。
+const PENDING_HINT = /(待办|TODO|未完成|下一步|还欠|欠着|待做|待验证|做不到|剩下)/i
+
+function readPendingBrief(workspace, config = {}) {
+  const ws = workspace || (process.cwd ? process.cwd() : '')
+  if (!ws) return ''
+  const dirs = (Array.isArray(config.handoffDirs) && config.handoffDirs.length
+    ? config.handoffDirs
+    : ['state/handoff', 'state/handoffs', 'docs/handoff']).slice(0, 5)
+  const maxFiles = Math.max(1, Math.min(Number(config.handoffFiles) || 2, 5))
+  const maxLines = Math.max(3, Math.min(Number(config.handoffLines) || 6, 12))
+  const picked = []
+  for (const d of dirs) {
+    const abs = path.isAbsolute(String(d)) ? String(d) : path.join(ws, String(d))
+    let names = []
+    try { names = fs.readdirSync(abs) } catch { continue }
+    const files = names
+      .filter((n) => /\.(md|txt)$/i.test(n))
+      .map((n) => {
+        const f = path.join(abs, n)
+        try { return { f, n, t: fs.statSync(f).mtimeMs } } catch { return null }
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.t - a.t)
+    for (const file of files) {
+      let raw = ''
+      try { raw = fs.readFileSync(file.f, 'utf8') } catch { continue }
+      const all = raw.split(/\r?\n/)
+      const lines = []
+      const title = all.find((l) => l.trim() && !l.startsWith('---'))
+      if (title) lines.push(title.replace(/^#+\s*/, '').trim())
+      for (let i = 0; i < all.length; i++) {
+        if (lines.length > maxLines) break
+        const l = all[i]
+        if (!PENDING_HINT.test(l)) continue
+        const clean = l.replace(/^#+\s*/, '').replace(/^\s*[-*]\s*/, '').trim()
+        if (clean.length > 2 && !lines.includes(clean)) lines.push(clean)
+        // 命中的是小标题：把它下面的正文一起带上（遇到下一个标题就停）
+        if (/^\s*#/.test(l)) {
+          for (let j = i + 1; j < all.length && lines.length <= maxLines; j++) {
+            const nx = all[j].trim()
+            if (!nx) continue
+            if (/^#/.test(nx)) break
+            const c = nx.replace(/^\s*[-*]\s*/, '').trim()
+            if (c && !lines.includes(c)) lines.push(c)
+          }
+        }
+      }
+      if (lines.length <= 1) continue
+      picked.push({ rel: path.relative(ws, file.f).replace(/\\/g, '/'), lines: lines.slice(0, maxLines + 1) })
+      if (picked.length >= maxFiles) break
+    }
+    if (picked.length >= maxFiles) break
+  }
+  if (!picked.length) return ''
+  return picked.map((p) => '· ' + p.rel + '\n' + '  ' + p.lines.join('\n  ')).join('\n')
+}
+
 function oneLine(s, n = 200) {
   return String(s || '').replace(/\s+/g, ' ').trim().slice(0, n)
 }
@@ -757,6 +818,10 @@ export function apply(ctx, config = {}) {
       buildTimeline(dshSessionsRoot(config), config.workspace || (process.cwd ? process.cwd() : ''), config, 5),
     )
   } catch {}
+  let pendingBrief = ''
+  try {
+    pendingBrief = readPendingBrief(config.workspace || (process.cwd ? process.cwd() : ''), config)
+  } catch {}
   try {
     const sp = ctx.get('systemPrompt')
     if (sp && typeof sp.context === 'function') {
@@ -766,10 +831,11 @@ export function apply(ctx, config = {}) {
           order: 700,
           interpolate: false,
           text:
-            '【会话接续】你是一个新会话，之前发生过什么你还不知道。下面这段是最近几个会话的最后状态，先读一遍再开口：\n\n' +
+            '【接着上次】最近这几个会话，最后停在这儿：\n\n' +
             (timelineBrief || '（这次没读到最近的会话记录；需要的话调 session_archive timeline）') +
-            '\n\n要看更细的（对方说过什么、最后做了什么、退化到哪一步）就调 `session_archive digest`' +
-            '（不填 sessionId 就是上一个会话，会自动跳过当前这个）。',
+            (pendingBrief ? '\n\n【还欠着的事】上一次交接留下的、还没做完的事（不用等对方提醒）：\n\n' + pendingBrief : '') +
+            '\n\n要更细的就调 `session_archive digest`' +
+            '（不填 sessionId 就是上一个会话）。',
         })
         return () => {
           try { if (typeof dispose === 'function') dispose() } catch {}

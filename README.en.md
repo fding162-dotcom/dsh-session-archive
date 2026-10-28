@@ -80,6 +80,12 @@ Tool name: `session_archive`
 
 The response always states which session the archive belongs to, and when you pass a `sessionId` that doesn't exist it errors out instead of silently switching to a different session.
 
+## Startup hint + what is still owed
+
+At startup the plugin injects a block (order 700): the last line of each of the most recent sessions, and right after it **what is still owed**. The latter reads the newest handoff notes from `state/handoff` (configurable via `config.handoffDirs`) and pulls out the paragraphs mentioning pending work.
+
+The last-line digest alone is not enough: what actually gets lost between sessions is the unfinished work. It lives in a handoff note someone wrote when the previous session ended — and nobody reopens that unless prompted. So the prompt does it.
+
 ## Output cap
 
 A single response is hard-capped at **12,000 characters**: `list` shows at most 50 sessions, `stats` the last 14 days, `search` at most 30 hits — anything beyond is truncated and the remainder is reported. Long output can never blow up your context.

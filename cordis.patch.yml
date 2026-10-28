@@ -8,3 +8,8 @@
         sessionsRoot: ''
         # read/digest 默认最多回多少条
         maxTail: 80
+        # 新会话开场时，从这些目录里摘「还欠着的事」（相对 workspace；不存在就跳过）
+        handoffDirs: ['state/handoff']
+        # 摘最新几份、每份最多几行
+        handoffFiles: 2
+        handoffLines: 6
