@@ -1,0 +1,33 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: 语法检查
+        run: |
+          node --check index.js
+          node --check read_session.mjs
+          node --check test_ci.mjs
+
+      - name: 干净环境功能测试
+        run: node test_ci.mjs
+
+      - name: 边界测试（有会话数据时更完整，没有也应当通过）
+        run: node test_bounds.mjs

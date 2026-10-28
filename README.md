@@ -1,5 +1,7 @@
 # dsh-session-archive
 
+[![test](https://github.com/fding162-dotcom/dsh-session-archive/actions/workflows/test.yml/badge.svg)](https://github.com/fding162-dotcom/dsh-session-archive/actions/workflows/test.yml)
+
 [English](README.en.md) · 中文
 
 > 给 [DeepSeek Harness](https://github.com/deepseek-ai) 的「会话档案库」插件。
