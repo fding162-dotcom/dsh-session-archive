@@ -107,6 +107,15 @@ function shortCount(reasoning) {
   return n
 }
 
+/** 读到几乎空的会话时明确提示：可能是刚创建，或者 DSH 正在重写这个文件 */
+function sparseTip(d) {
+  if (d && typeof d.lines === 'number' && d.lines < 3 && !d.degraded) {
+    d.degraded = true
+    d.note = `这个会话现在几乎是空的（${d.lines} 条事件）——可能刚创建，或者 DSH 正在重写它。过几秒再 digest 一次。`
+  }
+  return d
+}
+
 /** 解压 + 解析一个会话：优先 spawn 独立 Node（宿主 zlib 只解第一帧），失败再退回本地解压 */
 function loadSession(file, config = {}) {
   const st = fs.statSync(file)
@@ -124,7 +133,7 @@ function loadSession(file, config = {}) {
     if (!r.error && r.status === 0 && r.stdout) {
       try {
         const parsed = JSON.parse(r.stdout)
-        if (parsed && typeof parsed === 'object') return parsed
+        if (parsed && typeof parsed === 'object') return sparseTip(parsed)
       } catch {}
     }
     // 失败就退回本地解压，但要标记 degraded——宿主 Node 可能只解第一帧，
@@ -133,9 +142,9 @@ function loadSession(file, config = {}) {
     const d = loadSessionLocal(file, st)
     d.degraded = true
     d.note = `独立 Node 解压失败（${why}），已退回宿主内解压，内容可能不完整`
-    return d
+    return sparseTip(d)
   }
-  return loadSessionLocal(file, st)
+  return sparseTip(loadSessionLocal(file, st))
 }
 
 /** 本地解压（宿主 Node 版本可能只解第一帧；仅作兜底） */
