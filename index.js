@@ -41,11 +41,14 @@ function dshSessionsRoot(config) {
 
 /** 把工作区路径转成 DSH 的会话目录名：D:\deepseek AI -> --D-deepseek~0020AI-- */
 function escapeWorkdir(p) {
+  // DSH 规则：盘符的冒号直接去掉，斜杠变横线，其余非 [A-Za-z0-9_-] 转成 ~XXXX。
+  // 例：D:\deepseek AI -> --D-deepseek~0020AI--
   const s = String(p).replace(/\\/g, '/')
   let out = ''
   for (let i = 0; i < s.length; i++) {
     const ch = s[i]
-    if (ch === ':' || ch === '/') out += '-'
+    if (ch === ':') continue
+    if (ch === '/') out += '-'
     else if (/[A-Za-z0-9_-]/.test(ch)) out += ch
     else out += '~' + s.charCodeAt(i).toString(16).toUpperCase().padStart(4, '0')
   }
