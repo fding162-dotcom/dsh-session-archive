@@ -365,6 +365,44 @@ function skipEmptySession(sessions, target, d, specified) {
   return { target, d }
 }
 
+
+/** 拼一条时间线：最近 N 个会话，每个带最后一句/最后回复/最后动作 */
+function buildTimeline(root, workspace, config, limit = 10) {
+  const sessions = listSessions(root, workspace).slice(0, limit)
+  const now = Date.now()
+  const out = []
+  for (const s of sessions) {
+    let d
+    try { d = loadSession(s.file, config) } catch { continue }
+    const lastUser = d.users.length ? d.users[d.users.length - 1] : null
+    const lastAsst = [...d.asst].reverse().find((x) => x.text)
+    out.push({
+      id: s.id,
+      mtime: s.mtime,
+      minutesAgo: Math.round((now - s.mtime) / 60000),
+      turns: d.asst.length ? Math.max(...d.asst.map((x) => x.turn)) : 0,
+      events: d.lines,
+      lastUser: lastUser ? oneLine(lastUser.text, 100) : '',
+      lastAssistant: lastAsst ? oneLine(lastAsst.text, 100) : '',
+      lastTool: d.tools.length ? d.tools[d.tools.length - 1].name : '',
+    })
+  }
+  return out
+}
+
+/** 把时间线渲染成给模型看的一小段（启动提示用） */
+function renderTimelineBrief(tl) {
+  if (!tl || !tl.length) return ''
+  const when = (m) => (m < 1 ? '刚刚' : m < 60 ? m + ' 分钟前' : Math.round(m / 60) + ' 小时前')
+  return tl.map((s) => {
+    const lines = ['▸ ' + when(s.minutesAgo) + ' · ' + s.id + ' · ' + s.turns + ' 轮']
+    if (s.lastUser) lines.push('  对方：' + s.lastUser)
+    if (s.lastAssistant) lines.push('  回复：' + s.lastAssistant)
+    if (s.lastTool) lines.push('  最后动作：' + s.lastTool)
+    return lines.join('\n')
+  }).join('\n\n')
+}
+
 function oneLine(s, n = 200) {
   return String(s || '').replace(/\s+/g, ' ').trim().slice(0, n)
 }
@@ -617,28 +655,8 @@ function buildTool(config = {}) {
         }
 
         if (action === 'timeline') {
-          const sessions = listSessions(root, workspace)
           const limit = Math.max(1, Math.min(Number(a.count) || 10, 20))
-          const now = Date.now()
-          const out = []
-          for (const s of sessions.slice(0, limit)) {
-            let d
-            try { d = loadSession(s.file, config) } catch { continue }
-            const lastUser = d.users.length ? d.users[d.users.length - 1] : null
-            const lastAsst = [...d.asst].reverse().find((x) => x.text)
-            const lastTool = d.tools.length ? d.tools[d.tools.length - 1] : null
-            out.push({
-              id: s.id,
-              mtime: s.mtime,
-              minutesAgo: Math.round((now - s.mtime) / 60000),
-              turns: d.asst.length ? Math.max(...d.asst.map((x) => x.turn)) : 0,
-              events: d.lines,
-              lastUser: lastUser ? oneLine(lastUser.text, 100) : '',
-              lastAssistant: lastAsst ? oneLine(lastAsst.text, 100) : '',
-              lastTool: lastTool ? lastTool.name : '',
-            })
-          }
-          return { ok: true, action, sessions: out }
+          return { ok: true, action, sessions: buildTimeline(root, workspace, config, limit) }
         }
 
         if (action === 'digest') {
@@ -732,7 +750,13 @@ export function apply(ctx, config = {}) {
     ctx.effect(() => tools.register(buildTool(config)), 'xiaolian-session-archive: session_archive')
   }
 
-  // 启动提醒（插件自带，不依赖 AGENTS）：让新会话知道「先翻上一个会话」
+  // 启动提醒（插件自带，不依赖 AGENTS）：新会话一开就带着「最近发生了什么」
+  let timelineBrief = ''
+  try {
+    timelineBrief = renderTimelineBrief(
+      buildTimeline(dshSessionsRoot(config), config.workspace || (process.cwd ? process.cwd() : ''), config, 5),
+    )
+  } catch {}
   try {
     const sp = ctx.get('systemPrompt')
     if (sp && typeof sp.context === 'function') {
@@ -742,9 +766,10 @@ export function apply(ctx, config = {}) {
           order: 700,
           interpolate: false,
           text:
-            '【会话接续】不确定这个会话是怎么来的、上一个会话在做什么？先调 `session_archive digest`' +
-            '（不填 sessionId 就是上一个会话，会自动跳过当前这个）。它会告诉你：对方最后说了什么、最后在做什么、退化到哪一步。' +
-            '除非你确定不需要，新会话第一件事就做它。',
+            '【会话接续】你是一个新会话，之前发生过什么你还不知道。下面这段是最近几个会话的最后状态，先读一遍再开口：\n\n' +
+            (timelineBrief || '（这次没读到最近的会话记录；需要的话调 session_archive timeline）') +
+            '\n\n要看更细的（对方说过什么、最后做了什么、退化到哪一步）就调 `session_archive digest`' +
+            '（不填 sessionId 就是上一个会话，会自动跳过当前这个）。',
         })
         return () => {
           try { if (typeof dispose === 'function') dispose() } catch {}
