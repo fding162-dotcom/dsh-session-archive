@@ -30,12 +30,19 @@ const run = async (label, args) => {
   console.log(`\n=== ${label} (${dt}ms) lossless=${same} undefined=${bad.length} ===`)
   const rendered = tool.output.render(args, r)
   console.log(rendered[0].text.slice(0, 1200))
+  return r
 }
 
-await run('list', { action: 'list' })
-await run('digest', { action: 'digest', sessionId: 'session-2a5a56d3-ca08-4873-a384-978f41e2a71a', count: 8 })
+const listRes = await run('list', { action: 'list' })
+// 不写死任何会话 id：拿本机第一个会话去测，换台机器也能跑
+const firstId = listRes?.sessions?.[0]?.id
+if (firstId) {
+  await run('digest', { action: 'digest', sessionId: firstId, count: 8 })
+  await run('read', { action: 'read', sessionId: firstId, count: 6 })
+  await run('search', { action: 'search', query: '', maxSessions: 3, context: 1 })
+} else {
+  console.log('（本机没有可读会话，只验证了注册与 list，跳过 digest/read/search）')
+}
 await run('digest-default', { action: 'digest', count: 3 })
-await run('read', { action: 'read', sessionId: 'session-2a5a56d3-ca08-4873-a384-978f41e2a71a', count: 6 })
-await run('search', { action: 'search', query: 'CosyVoice', maxSessions: 3, context: 1 })
 await run('stats', { action: 'stats' })
 await run('live', { action: 'live', minutes: 60, count: 3 })

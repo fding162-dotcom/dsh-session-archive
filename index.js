@@ -109,7 +109,7 @@ function loadSession(file, config = {}) {
   const st = fs.statSync(file)
   if (st.size > MAX_COMPRESSED) throw new Error(`会话压缩包 ${fmtSize(st.size)} 超过上限 ${fmtSize(MAX_COMPRESSED)}`)
 
-  const nodePath = config.nodePath || 'node'
+  const nodePath = config.nodePath || process.execPath || 'node'
   const helper = path.join(HERE, 'read_session.mjs')
   if (fs.existsSync(helper)) {
     const r = spawnSync(nodePath, [helper, file], {
@@ -216,7 +216,7 @@ function pickSession(sessions, sessionId, self) {
 /** 批量读会话头（创建时间 / 事件数）：一次 spawn 处理多个文件 */
 function readHeads(files, config = {}) {
   if (!files.length) return []
-  const nodePath = config.nodePath || 'node'
+  const nodePath = config.nodePath || process.execPath || 'node'
   const helper = path.join(HERE, 'read_session.mjs')
   const r = spawnSync(nodePath, [helper, '--heads', ...files], {
     encoding: 'utf8',

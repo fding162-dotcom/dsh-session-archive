@@ -44,6 +44,8 @@ cp ~/.dsh/profiles/desktop/package.json ~/.dsh/profiles/desktop/package.json.bak
 
 重启后工具 `session_archive` 出现，另外会往系统提示里注入一行「新会话先 digest」的提醒（见下）。
 
+> **依赖的 node 从哪来**：默认用 DSH 自己的进程（`process.execPath`），不需要系统 PATH 里有 node。只有在配置里写了 `nodePath` 才改用它。
+
 > **工作区怎么定**：默认用当前进程的 cwd；想固定到某个目录，在 `cordis.patch.yml` 里填 `workspace`。如果那个目录在 `~/.dsh/sessions` 下找不到对应会话，插件会退回列出**所有**工作区的会话，并在返回里说明——这是为了防止路径写错时完全没线索。
 
 ## 六个动作
