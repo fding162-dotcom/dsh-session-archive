@@ -1,5 +1,7 @@
 # dsh-session-archive
 
+[English](README.en.md) · 中文
+
 > 给 [DeepSeek Harness](https://github.com/deepseek-ai) 的「会话档案库」插件。
 > **把同一个工作区的旧会话当储存区，新会话能从里面取出「发生过什么」——把上下文从单个会话延长成一串。**
 

@@ -218,14 +218,25 @@ function readHeads(files, config = {}) {
   if (!files.length) return []
   const nodePath = config.nodePath || process.execPath || 'node'
   const helper = path.join(HERE, 'read_session.mjs')
-  const r = spawnSync(nodePath, [helper, '--heads', ...files], {
-    encoding: 'utf8',
-    maxBuffer: 128 * 1024 * 1024,
-    timeout: 60000,
-    windowsHide: true,
-  })
-  if (r.error || r.status !== 0 || !r.stdout) return []
-  try { return JSON.parse(r.stdout) } catch { return [] }
+  // 分批 spawn：几百个会话一次性塞进命令行会撞上 Windows 命令行长度上限，
+  // 那样整批都会失败，所有会话的时间/条数就全空了。
+  const BATCH = 40
+  const out = []
+  for (let i = 0; i < files.length; i += BATCH) {
+    const batch = files.slice(i, i + BATCH)
+    const r = spawnSync(nodePath, [helper, '--heads', ...batch], {
+      encoding: 'utf8',
+      maxBuffer: 128 * 1024 * 1024,
+      timeout: 60000,
+      windowsHide: true,
+    })
+    if (r.error || r.status !== 0 || !r.stdout) continue
+    try {
+      const arr = JSON.parse(r.stdout)
+      if (Array.isArray(arr)) out.push(...arr)
+    } catch {}
+  }
+  return out
 }
 
 /** 会话头缓存文件：默认放 DSH_HOME 下，可用 config.cacheFile 覆盖 */
