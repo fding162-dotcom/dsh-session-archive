@@ -48,6 +48,10 @@ cp ~/.dsh/profiles/desktop/package.json ~/.dsh/profiles/desktop/package.json.bak
 
 > **工作区怎么定**：默认用当前进程的 cwd；想固定到某个目录，在 `cordis.patch.yml` 里填 `workspace`。如果那个目录在 `~/.dsh/sessions` 下找不到对应会话，插件会退回列出**所有**工作区的会话，并在返回里说明——这是为了防止路径写错时完全没线索。
 
+## 输出上限
+
+单次输出硬顶 **12000 字符**：list 最多列 50 个会话、stats 只显最近 14 天、search 最多 30 处命中，超出会写明还剩多少。再长的内容也只会截断，不会把整段上下文冲掉。
+
 ## 六个动作
 
 工具名：`session_archive`

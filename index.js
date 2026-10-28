@@ -285,6 +285,15 @@ function fillHeads(sessions, config) {
   return sessions
 }
 
+/** 输出硬上限：不管条目多少，总字符数封顶，防止一次输出把上下文冲掉 */
+const MAX_OUTPUT_CHARS = 12000
+function clampText(s, max = MAX_OUTPUT_CHARS) {
+  const t = String(s == null ? '' : s)
+  if (t.length <= max) return t
+  return t.slice(0, max) + `
+…（输出共 ${t.length} 字，已截断到 ${max}；想看的更准就缩条件：list/search 传更窄的关键词、digest 减 count）`
+}
+
 function oneLine(s, n = 200) {
   return String(s || '').replace(/\s+/g, ' ').trim().slice(0, n)
 }
@@ -325,7 +334,7 @@ function buildTool(config = {}) {
         },
       },
       render(_a, v) {
-        if (!v.ok) return text(`会话档案：${v.error || '失败'}`)
+        if (!v.ok) return text(clampText(`会话档案：${v.error || '失败'}`))
         if (v.action === 'list') {
           const lines = [`本工作区共 ${v.sessions.length} 个会话（按最后活动倒序，★ 是最新的那个）：`]
           const shownList = v.sessions.slice(0, 50)
@@ -339,7 +348,7 @@ function buildTool(config = {}) {
           lines.push('')
           lines.push('找「上一个会话」：一般是 ★ 下面那个（★ 通常就是你现在这个会话）。')
           lines.push('digest 不填 sessionId 会自动跳过 ★；确实要看 ★ 自己就传 self=true。')
-          return text(lines.join('\n'))
+          return text(clampText(lines.join('\n')))
         }
         if (v.action === 'stats') {
           const s = v.stats
@@ -359,7 +368,7 @@ function buildTool(config = {}) {
               L.push(`  ${tag}  ${g.id}  每条 ${g.perMessage} 个单字句 · 全片 ${g.totalShort} 个`)
             }
           }
-          return text(L.join('\n'))
+          return text(clampText(L.join('\n')))
         }
         if (v.action === 'live') {
           const L = [`最近 ${v.minutes} 分钟内有动静的会话（${v.sessions.length} 个）：`]
@@ -371,7 +380,7 @@ function buildTool(config = {}) {
             if (s.lastAssistant) L.push(`   最后回复：${oneLine(s.lastAssistant, 120)}`)
             if (s.lastTools.length) L.push(`   最后动作：${s.lastTools.map((t) => t.name).join('、')}`)
           }
-          return text(L.join('\n'))
+          return text(clampText(L.join('\n')))
         }
         if (v.action === 'digest') {
           const d = v.digest
@@ -397,14 +406,14 @@ function buildTool(config = {}) {
             L.push('')
             L.push('最后一句回复：' + oneLine(d.lastAssistant, 200))
           }
-          return text(L.join('\n'))
+          return text(clampText(L.join('\n')))
         }
         if (v.action === 'read') {
           const L = []
           if (v.degraded) L.push(`⚠️ 警告：${v.note}`)
           L.push(`会话 ${v.sessionId} 最后 ${v.messages.length} 条对话：`)
           for (const m of v.messages) L.push(`  [turn ${m.turn} ${m.role}] ${oneLine(m.text, 220)}`)
-          return text(L.join('\n'))
+          return text(clampText(L.join('\n')))
         }
         if (v.action === 'search') {
           const L = [`关键词「${v.query}」在 ${v.scanned} 个会话里命中 ${v.hits.length} 处${v.withContext ? `（前后各 ${v.withContext} 条）` : ''}：`]
@@ -415,9 +424,9 @@ function buildTool(config = {}) {
             if (h.before) for (const b of h.before) L.push(`      ← ${b.role}：${oneLine(b.text, 100)}`)
             if (h.after) for (const a of h.after) L.push(`      → ${a.role}：${oneLine(a.text, 100)}`)
           }
-          return text(L.join('\n'))
+          return text(clampText(L.join('\n')))
         }
-        return text('会话档案：未知 action')
+        return text(clampText('会话档案：未知 action'))
       },
     },
     isConcurrencySafe: () => true,
