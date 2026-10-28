@@ -68,6 +68,14 @@ ln -s /绝对路径/plugins/dsh-session-archive ~/.dsh/profiles/desktop/node_mod
 
 > **工作区怎么定**：默认用当前进程的 cwd；想固定到某个目录，在 `cordis.patch.yml` 里填 `workspace`。如果那个目录在 `~/.dsh/sessions` 下找不到对应会话，插件会退回列出**所有**工作区的会话，并在返回里说明——这是为了防止路径写错时完全没线索。
 
+## 给之后写 DSH 插件的人
+
+这个插件踩过的坑（Electron 的 `process.execPath` 不是 node、工作区转义规则、批量 spawn 撞命令行上限、PowerShell 空数组是 falsy……），单独整理成了一份通用避坑指南：
+
+**[PITFALLS.md](PITFALLS.md)**
+
+它跟这个插件无关，写任何 DSH 插件都用得上。
+
 ## 已知局限（想完善的话从这里下手）
 
 1. **启动快照是「DSH 启动那一刻」算的。** 系统提示里那 5 条时间线只在插件加载时生成一次；同一进程里再开新窗口，看到的还是启动时的版本。要做成每次实时，需要接住 DSH 的「会话创建」事件——那个接口还没确认。
