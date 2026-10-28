@@ -109,9 +109,13 @@ function shortCount(reasoning) {
 
 /** 读到几乎空的会话时明确提示：可能是刚创建，或者 DSH 正在重写这个文件 */
 function sparseTip(d) {
-  if (d && typeof d.lines === 'number' && d.lines < 3 && !d.degraded) {
+  if (!d || typeof d.lines !== 'number') return d
+  const noTalk = !(d.users && d.users.length) && !(d.asst && d.asst.length)
+  if (!d.degraded && (d.lines < 3 || noTalk)) {
     d.degraded = true
-    d.note = `这个会话现在几乎是空的（${d.lines} 条事件）——可能刚创建，或者 DSH 正在重写它。过几秒再 digest 一次。`
+    d.note = noTalk
+      ? `这个会话里没有对话内容（只有 ${d.lines} 条事件）——可能是建了没用的空会话，或者 DSH 正在重写它。用 list 挑一个别的，或等几秒再试。`
+      : `这个会话现在几乎是空的（${d.lines} 条事件）——可能刚创建，或者 DSH 正在重写它。过几秒再 digest 一次。`
   }
   return d
 }
@@ -315,6 +319,27 @@ function clampText(s, max = MAX_OUTPUT_CHARS) {
   if (t.length <= max) return t
   return t.slice(0, max) + `
 …（输出共 ${t.length} 字，已截断到 ${max}；想看的更准就缩条件：list/search 传更窄的关键词、digest 减 count）`
+}
+
+
+/** 不填 id 时落到了空会话上，就往更早的会话找，最多找 3 个 */
+function skipEmptySession(sessions, target, d, specified) {
+  if (specified) return { target, d }
+  const noTalk = !(d.users && d.users.length) && !(d.asst && d.asst.length)
+  if (!noTalk) return { target, d }
+  const idx = sessions.findIndex((s) => s.file === target.file)
+  if (idx < 0) return { target, d }
+  for (let k = idx + 1; k < sessions.length && k <= idx + 3; k++) {
+    try {
+      const nd = loadSession(sessions[k].file, {})
+      if ((nd.users && nd.users.length) || (nd.asst && nd.asst.length)) {
+        nd.degraded = true
+        nd.note = `（已跳过空会话 ${target.id}，这条来自 ${sessions[k].id}）`
+        return { target: sessions[k], d: nd }
+      }
+    } catch {}
+  }
+  return { target, d }
 }
 
 function oneLine(s, n = 200) {
