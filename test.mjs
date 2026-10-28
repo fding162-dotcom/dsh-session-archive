@@ -46,3 +46,4 @@ if (firstId) {
 await run('digest-default', { action: 'digest', count: 3 })
 await run('stats', { action: 'stats' })
 await run('live', { action: 'live', minutes: 60, count: 3 })
+console.log('全部通过：六个动作都返回了无损 JSON')
