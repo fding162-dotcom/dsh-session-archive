@@ -151,6 +151,13 @@ ln -s /绝对路径/plugins/dsh-session-archive ~/.dsh/profiles/desktop/node_mod
 
 即使宿主或角色文件忘了写提示，新会话也会被提醒。
 
+### 子智能体（subagent）会话
+
+DSH 里子代理的会话目录是**裸 `<id>`**（主会话是 `session-<id>`），会话头还带 `origin: subagent`、`parentSession` 和一句 `label`。插件会把它们认出来：
+
+- `list` 里带 `↳子` 标记，并在开头告诉你「那是代理的档，不是另一个窗口的你」
+- 启动接续块和 `timeline` **默认不含**子会话（它们不是「上一个我」）；要看就传 `config.includeSubagents: true`
+
 ### 会话头缓存
 
 读「开于时间」和事件数要解压整个会话，大文件很慢（92MB 约 700ms）。所以：

@@ -89,7 +89,9 @@ function listSessions(root, workspace) {
       const file = path.join(base, e, SESSION_FILE)
       try {
         const st = fs.statSync(file)
-        out.push({ id: e.replace(/^session-/, ''), dirName: e, workspaceDir: path.basename(base), file, mtime: st.mtimeMs, size: st.size })
+        // DSH 的主会话目录叫 session-<id>；子智能体（subagent）的是裸 <id>。
+        // 先按目录名判一次，这样连解压都不用就能把两类分开。
+        out.push({ id: e.replace(/^session-/, ''), dirName: e, sub: !e.startsWith('session-'), workspaceDir: path.basename(base), file, mtime: st.mtimeMs, size: st.size })
       } catch {}
     }
   }
@@ -306,6 +308,10 @@ function fillHeads(sessions, config) {
     if (c && c.mtimeMs === s.mtime && c.size === s.size) {
       s.createdAt = c.createdAt ?? null
       s.lines = c.lines ?? null
+      s.origin = c.origin ?? null
+      s.parentSession = c.parentSession ?? null
+      s.subLabel = c.label ?? null
+      if (s.origin === 'subagent') s.sub = true
     } else {
       missing.push(s)
     }
@@ -321,9 +327,19 @@ function fillHeads(sessions, config) {
         size: s ? s.size : 0,
         createdAt: h.createdAt ?? null,
         lines: h.lines ?? null,
+        origin: h.origin ?? null,
+        parentSession: h.parentSession ?? null,
+        label: h.label ?? null,
         cachedAt: now,
       }
-      if (s) { s.createdAt = h.createdAt ?? null; s.lines = h.lines ?? null }
+      if (s) {
+        s.createdAt = h.createdAt ?? null
+        s.lines = h.lines ?? null
+        s.origin = h.origin ?? null
+        s.parentSession = h.parentSession ?? null
+        s.subLabel = h.label ?? null
+        if (s.origin === 'subagent') s.sub = true
+      }
     }
     const keys = Object.keys(cache)
     if (keys.length > 500) {
@@ -368,7 +384,9 @@ function skipEmptySession(sessions, target, d, specified) {
 
 /** 拼一条时间线：最近 N 个会话，每个带最后一句/最后回复/最后动作 */
 function buildTimeline(root, workspace, config, limit = 10) {
-  const sessions = listSessions(root, workspace).slice(0, limit)
+  const all = listSessions(root, workspace)
+  // 子智能体的会话不是「上一个我」，接续块里默认不混进来；想看就传 includeSubagents
+  const sessions = (config && config.includeSubagents ? all : all.filter((x) => !x.sub)).slice(0, limit)
   const now = Date.now()
   const out = []
   for (const s of sessions) {
@@ -395,7 +413,7 @@ function renderTimelineBrief(tl) {
   if (!tl || !tl.length) return ''
   const when = (m) => (m < 1 ? '刚刚' : m < 60 ? m + ' 分钟前' : Math.round(m / 60) + ' 小时前')
   return tl.map((s) => {
-    const lines = ['▸ ' + when(s.minutesAgo) + ' · ' + s.id + ' · ' + s.turns + ' 轮']
+    const lines = ['▸ ' + when(s.minutesAgo) + ' · ' + s.id + (s.sub ? '（子智能体会话）' : '') + ' · ' + s.turns + ' 轮']
     if (s.lastUser) lines.push('  对方：' + s.lastUser)
     if (s.lastAssistant) lines.push('  回复：' + s.lastAssistant)
     if (s.lastTool) lines.push('  最后动作：' + s.lastTool)
@@ -506,14 +524,16 @@ function buildTool(config = {}) {
       render(_a, v) {
         if (!v.ok) return text(clampText(`会话档案：${v.error || '失败'}`))
         if (v.action === 'list') {
+          const subCount = v.sessions.filter((x) => x.sub).length
           const lines = [`本工作区共 ${v.sessions.length} 个会话（按最后活动倒序，★ 是最新的那个）：`]
+          if (subCount) lines.push(`其中 ${subCount} 个是子智能体（subagent）的会话，带 ↳子 标记——那是代理的档，不是另一个窗口的你。`)
           const shownList = v.sessions.slice(0, 50)
           if (v.sessions.length > 50) lines.push(`（只列最近 50 个；还有 ${v.sessions.length - 50} 个没列，用 search 直接搜关键词）`)
           shownList.forEach((s, i) => {
             const star = i === 0 ? '★ ' : '  '
             const created = s.createdAt ? `开于 ${fmtTime(s.createdAt)}` : '开于 ?'
             const tail = s.lines ? ` · ${s.lines} 条事件` : ''
-            lines.push(`${star}${s.id}  ${created} · 最后动静 ${fmtTime(s.mtime)} · ${fmtSize(s.size)}${tail}`)
+            lines.push(`${star}${s.id}${s.sub ? ' ↳子' : ''}  ${created} · 最后动静 ${fmtTime(s.mtime)} · ${fmtSize(s.size)}${tail}${s.subLabel ? ' · ' + s.subLabel : ''}`)
           })
           lines.push('')
           lines.push('找「上一个会话」：一般是 ★ 下面那个（★ 通常就是你现在这个会话）。')

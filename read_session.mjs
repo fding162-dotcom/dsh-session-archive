@@ -23,6 +23,17 @@ if (process.argv[2] === '--heads') {
         id: o.id,
         cwd: o.cwd,
         createdAt: o.createdAt,
+        // 子智能体（subagent）的会话靠这几个字段认：主会话这三项都是空的
+        origin: o.origin || null,
+        parentSession: o.parentSession || null,
+        label: (() => {
+          try {
+            const second = text.split('\n')[1]
+            if (!second) return null
+            const ev = JSON.parse(second)
+            return ev && ev.type === 'subagent/descriptor' ? (ev.data && ev.data.label) || null : null
+          } catch { return null }
+        })(),
         lines: text.split('\n').filter((x) => x.trim()).length,
       })
     } catch (e) {

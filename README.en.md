@@ -86,6 +86,13 @@ At startup the plugin injects a block (order 700): the last line of each of the 
 
 The last-line digest alone is not enough: what actually gets lost between sessions is the unfinished work. It lives in a handoff note someone wrote when the previous session ended — and nobody reopens that unless prompted. So the prompt does it.
 
+## Subagent sessions
+
+In DSH, a subagent session directory is a bare `<id>` (regular sessions are `session-<id>`), and its header carries origin=subagent, parentSession and a label. The plugin tells them apart:
+
+- `list` marks them with a suffix and says up front that these are the delegate files, not another window of you
+- the startup hint and `timeline` skip subagent sessions by default (they are not the previous me); pass `config.includeSubagents: true` to include them
+
 ## Output cap
 
 A single response is hard-capped at **12,000 characters**: `list` shows at most 50 sessions, `stats` the last 14 days, `search` at most 30 hits — anything beyond is truncated and the remainder is reported. Long output can never blow up your context.
