@@ -52,7 +52,7 @@ $raw = Get-Content $PkgPath -Raw -Encoding UTF8
 $json = $raw | ConvertFrom-Json
 
 if ($Uninstall) {
-  if ($json.dsh -and $json.dsh.profile -and $json.dsh.profile.bundles) {
+  if ($json.PSObject.Properties['dsh'] -and $json.dsh.PSObject.Properties['profile'] -and $json.dsh.profile.PSObject.Properties['bundles']) {
     $json.dsh.profile.bundles = @($json.dsh.profile.bundles | Where-Object { $_ -ne $Name })
   }
   if ($json.dependencies -and $json.dependencies.PSObject.Properties[$Name]) {
@@ -69,9 +69,11 @@ if ($Uninstall) {
 }
 
 # ---------- add to profile ----------
-if (-not $json.dsh) { $json | Add-Member -NotePropertyName dsh -NotePropertyValue (New-Object PSObject) }
-if (-not $json.dsh.profile) { $json.dsh | Add-Member -NotePropertyName profile -NotePropertyValue (New-Object PSObject) }
-if (-not $json.dsh.profile.bundles) { $json.dsh.profile | Add-Member -NotePropertyName bundles -NotePropertyValue @() }
+# 注意：PowerShell 里空数组/空对象是 falsy，用 -not 会误判「已经存在」，
+# 所以这里一律用 PSObject.Properties 判断成员是否真的存在。
+if (-not $json.PSObject.Properties['dsh']) { $json | Add-Member -NotePropertyName dsh -NotePropertyValue (New-Object PSObject) }
+if (-not $json.dsh.PSObject.Properties['profile']) { $json.dsh | Add-Member -NotePropertyName profile -NotePropertyValue (New-Object PSObject) }
+if (-not $json.dsh.profile.PSObject.Properties['bundles']) { $json.dsh.profile | Add-Member -NotePropertyName bundles -NotePropertyValue @() }
 
 $changed = $false
 $bundles = @($json.dsh.profile.bundles)
@@ -83,7 +85,7 @@ if ($bundles -notcontains $Name) {
   Write-Host "profile : already in bundles"
 }
 
-if (-not $json.dependencies) { $json | Add-Member -NotePropertyName dependencies -NotePropertyValue (New-Object PSObject) }
+if (-not $json.PSObject.Properties['dependencies']) { $json | Add-Member -NotePropertyName dependencies -NotePropertyValue (New-Object PSObject) }
 $depValue = 'link:' + ($PluginDir -replace '\\', '/')
 if ($json.dependencies.PSObject.Properties[$Name]) {
   if ($json.dependencies.$Name -ne $depValue) { $changed = $true }
