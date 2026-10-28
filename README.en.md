@@ -50,7 +50,7 @@ Restart DSH.
 > **Requires Node.js 22.15+ on your system.** DSH ships as an Electron app and its own runtime cannot execute scripts directly, so the plugin looks for `nodePath` in config, then `node` in PATH, then common install locations. If none is found it falls back to a single-frame decoder and says so clearly in the result.
 > **Workspace** defaults to the current process cwd. If the target workspace directory is not found under `~/.dsh/sessions`, the plugin falls back to listing **all** workspaces and says so — better than giving you no clue.
 
-## The six actions
+## The eight actions
 
 Tool name: `session_archive`
 
@@ -80,6 +80,16 @@ Tool name: `session_archive`
 
 The response always states which session the archive belongs to, and when you pass a `sessionId` that doesn't exist it errors out instead of silently switching to a different session.
 
+## Session chain (chain)
+
+DSH does not record which session handed over to which — only subagents carry a `parentSession`. So the edges come in three grades:
+
+1. Hard edge: a subagent session's own `parentSession`
+2. Semi-hard: the id list inside the startup hint block, picking the latest one that started before the block
+3. Guessed: the session that stopped just before this one started
+
+Grade 3 is labeled "guessed" in the output. It is an inference, not a record — it may look right and still be wrong. To make the chain real, write "handed over from <id>" into your handoff note; the plugin then has something to trust.
+
 ## Startup hint + what is still owed
 
 At startup the plugin injects a block (order 700): the last line of each of the most recent sessions, and right after it **what is still owed**. The latter reads the newest handoff notes from `state/handoff` (configurable via `config.handoffDirs`) and pulls out the paragraphs mentioning pending work.
@@ -98,6 +108,8 @@ In DSH, a subagent session directory is a bare `<id>` (regular sessions are `ses
 A single response is hard-capped at **12,000 characters**: `list` shows at most 50 sessions, `stats` the last 14 days, `search` at most 30 hits — anything beyond is truncated and the remainder is reported. Long output can never blow up your context.
 
 ## Known limitations (good starting points for contributors)
+
+**Most chain edges are guesswork.** Apart from a subagent's `parentSession`, DSH keeps no record of which session continues which. Grade 3 orders sessions by time only and is marked "guessed"; treating it as fact will mislead you.
 
 1. **The startup snapshot is computed once, at DSH boot.** The 5 entries in the system prompt are generated when the plugin loads; opening another window in the same process still shows that boot-time snapshot. Making it live would require hooking DSH's session-creation event, which I haven't confirmed exists.
 2. **Requires Node.js 22.15+ on the system.** DSH ships as Electron and its runtime cannot execute scripts; without node the plugin falls back to a single-frame decoder (incomplete data, with an explicit warning).

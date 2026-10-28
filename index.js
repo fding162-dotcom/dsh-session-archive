@@ -351,6 +351,106 @@ function fillHeads(sessions, config) {
   return sessions
 }
 
+/** 批量捞会话开头的接续块（上一代候选 + 块的时间）。链的原料就是它 */
+function readEdges(files, config = {}) {
+  if (!files.length) return []
+  const nodePath = resolveNodePath(config)
+  const helper = path.join(HERE, 'read_session.mjs')
+  // 每个会话都要完整解压一遍，比 heads 重，批次小一点，别把超时撞穿。
+  const BATCH = 12
+  const out = []
+  for (let i = 0; i < files.length; i += BATCH) {
+    const batch = files.slice(i, i + BATCH)
+    const r = spawnSync(nodePath, [helper, '--edges', ...batch], {
+      encoding: 'utf8',
+      maxBuffer: 128 * 1024 * 1024,
+      timeout: 180000,
+      windowsHide: true,
+    })
+    if (r.error || r.status !== 0 || !r.stdout) continue
+    try {
+      const arr = JSON.parse(r.stdout)
+      if (Array.isArray(arr)) out.push(...arr)
+    } catch {}
+  }
+  return out
+}
+
+/** 链的缓存：算一次存下来，之后按 mtime/size 增量更新 */
+function chainCachePath(config = {}) {
+  if (config.chainCacheFile) return String(config.chainCacheFile)
+  const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
+  return path.join(home, 'session-archive-chains.json')
+}
+
+function loadChainCache(config) {
+  try { return JSON.parse(fs.readFileSync(chainCachePath(config), 'utf8')) || {} } catch { return {} }
+}
+
+function saveChainCache(config, cache) {
+  try {
+    const f = chainCachePath(config)
+    fs.mkdirSync(path.dirname(f), { recursive: true })
+    fs.writeFileSync(f, JSON.stringify(cache), 'utf8')
+  } catch {}
+}
+
+/** 谁接谁的班。返回 { parentOf: Map(子 -> 父), weak: Set(靠时间推出来的那些) } */
+function buildParentMap(sessions, config = {}) {
+  const cache = loadChainCache(config)
+  const missing = []
+  for (const s of sessions) {
+    const c = cache[s.file]
+    if (c && c.mtimeMs === s.mtime && c.size === s.size) {
+      s.blockTime = c.blockTime ?? null
+      s.candidates = Array.isArray(c.candidates) ? c.candidates : []
+    } else missing.push(s)
+  }
+  if (missing.length) {
+    const edges = readEdges(missing.map((s) => s.file), config)
+    const now = Date.now()
+    for (const e of edges) {
+      if (e.error) continue
+      const s = missing.find((x) => x.file === e.file)
+      cache[e.file] = {
+        mtimeMs: s ? s.mtime : now,
+        size: s ? s.size : 0,
+        blockTime: e.blockTime ?? null,
+        candidates: e.candidates || [],
+        cachedAt: now,
+      }
+      if (s) { s.blockTime = e.blockTime ?? null; s.candidates = e.candidates || [] }
+    }
+    saveChainCache(config, cache)
+  }
+  const byId = new Map(sessions.map((s) => [s.id, s]))
+  const parentOf = new Map()
+  const weak = new Set()
+  for (const s of sessions) {
+    // 一档：子会话自带 parentSession，这是硬边
+    if (s.sub && s.parentSession) {
+      parentOf.set(s.id, String(s.parentSession).replace(/^session-/, ''))
+      continue
+    }
+    // 二档：接续块里当时最近的那几个 id 里，早于块时间、离得最近的那个
+    if (s.blockTime && s.candidates && s.candidates.length) {
+      const cands = s.candidates
+        .map((id) => byId.get(id))
+        .filter((x) => x && x.id !== s.id && !x.sub && x.createdAt && x.createdAt < s.blockTime)
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      if (cands.length) { parentOf.set(s.id, cands[0].id); continue }
+    }
+    // 三档：没有块，就找「在我开张之前刚刚停下」的那个。用上一代的结束时间配这一代的
+    // 开始时间，比拿两边的开张时间互相比靠谱。这是推的，渲染时标出来。
+    const prev = sessions
+      .filter((x) => x.id !== s.id && !x.sub && x.createdAt && x.mtime
+        && x.mtime < s.createdAt && x.mtime > s.createdAt - 24 * 3600 * 1000)
+      .sort((a, b) => (b.mtime || 0) - (a.mtime || 0))[0]
+    if (prev) { parentOf.set(s.id, prev.id); weak.add(s.id) }
+  }
+  return { parentOf, weak }
+}
+
 /** 输出硬上限：不管条目多少，总字符数封顶，防止一次输出把上下文冲掉 */
 const MAX_OUTPUT_CHARS = 12000
 function clampText(s, max = MAX_OUTPUT_CHARS) {
@@ -497,9 +597,11 @@ function buildTool(config = {}) {
       type: 'object',
       additionalProperties: false,
       properties: {
-        action: { type: 'string', enum: ['list', 'timeline', 'digest', 'read', 'search', 'stats', 'live'], description: 'list 列会话 / timeline 时间线（每个会话带最后一句和最后动作）/ digest 摘要 / read 读对话 / search 搜关键词 / stats 总览 / live 看最近哪些会话活着' },
+        action: { type: 'string', enum: ['list', 'timeline', 'digest', 'read', 'search', 'stats', 'live', 'chain'], description: 'list 列会话 / timeline 时间线（每个会话带最后一句和最后动作）/ chain 会话链（谁接谁的班、往上几代往下一代）/ digest 摘要 / read 读对话 / search 搜关键词 / stats 总览 / live 看最近哪些会话活着' },
         sessionId: { type: 'string', description: '会话 id（可带 session- 前缀）；不填时 digest/read 会跳过最新那个（通常是当前会话），取上一个' },
         count: { type: 'number', description: 'digest 里带几条对话/动作，read 里取几条；默认 12/10/40' },
+        up: { type: 'number', description: 'chain：往上追几代，默认 5' },
+        down: { type: 'number', description: 'chain：往下看几代，默认 3' },
         query: { type: 'string', description: 'search 的关键词' },
         maxSessions: { type: 'number', description: 'search 最多翻几个会话，默认 5' },
         context: { type: 'number', description: 'search 用：命中行前后各带几条上下文（0~5，默认 0）' },
@@ -540,6 +642,33 @@ function buildTool(config = {}) {
           lines.push('digest 不填 sessionId 会自动跳过 ★；确实要看 ★ 自己就传 self=true。')
           return text(clampText(lines.join('\n')))
         }
+        if (v.action === 'chain') {
+          const L = ['会话链：']
+          if (!v.ancestors.length) {
+            L.push('  上面没有了——它是这条链的起点，或者更早的已经删掉了')
+          } else {
+            L.push('  往上（旧 → 新）：')
+            for (const p of v.ancestors) {
+              if (p.missing) { L.push('  · ' + p.id + '（不见了：可能已经删了）'); continue }
+              const tags = [p.weak ? '推的' : ''].filter(Boolean).join('、')
+              L.push('  · ' + p.id + (p.lines ? '  ' + p.lines + ' 条事件' : '') + (tags ? '（' + tags + '）' : ''))
+            }
+          }
+          L.push('  这一代：' + v.sessionId)
+          if (!v.children.length) {
+            L.push('  下面还没有接班的——这条链到这儿了')
+          } else {
+            L.push('  接班人：')
+            for (const c of v.children) {
+              const t = [c.sub ? '子智能体' : '', c.weak ? '推的' : ''].filter(Boolean).join('、')
+              L.push('  · ' + c.id + (t ? '（' + t + '）' : ''))
+            }
+          }
+          L.push('')
+          L.push('（链是从每个会话开头的接续块推出来的，不是 DSH 记的；标「推的」= 那代没有块，只按开张时间排的）')
+          return text(clampText(L.join('\n')))
+        }
+
         if (v.action === 'stats') {
           const s = v.stats
           const L = [`会话总览：${s.count} 个会话，共 ${s.totalEvents} 条事件，${(s.totalBytes / 1024 / 1024).toFixed(1)}MB`]
@@ -653,6 +782,48 @@ function buildTool(config = {}) {
               size: s.size,
               lines: s.lines ?? null,
             })),
+          }
+        }
+
+        if (action === 'chain') {
+          const sessions = listSessions(root, workspace)
+          if (!sessions.length) return { ok: false, action, error: '没有会话' }
+          fillHeads(sessions, config)
+          const { parentOf, weak } = buildParentMap(sessions, config)
+          const byId = new Map(sessions.map((s) => [s.id, s]))
+          const up = Math.max(0, Math.min(Number(a.up) || 5, 30))
+          const main = sessions.filter((s) => !s.sub)
+          const wanted = a.sessionId ? String(a.sessionId).replace(/^session-/, '') : ''
+          const start = wanted ? byId.get(wanted) : main[0]
+          if (!start) return { ok: false, action, error: '没找到会话：' + a.sessionId }
+          const canon = []
+          let cur = start
+          for (let i = 0; i < up; i++) {
+            const pid = parentOf.get(cur.id)
+            if (!pid || pid === cur.id) break
+            const p = byId.get(pid)
+            if (!p) { canon.push({ id: pid, missing: true }); break }
+            canon.push({
+              id: p.id,
+              createdAt: p.createdAt ?? null,
+              mtime: p.mtime,
+              lines: p.lines ?? null,
+              weak: weak.has(p.id),
+            })
+            cur = p
+          }
+          canon.reverse()
+          const children = sessions
+            .filter((s) => parentOf.get(s.id) === start.id)
+            .map((s) => ({ id: s.id, sub: !!s.sub, createdAt: s.createdAt ?? null, weak: weak.has(s.id) }))
+            .slice(0, Number(a.down) || 3)
+          return {
+            ok: true,
+            action,
+            sessionId: start.id,
+            start: { id: start.id, createdAt: start.createdAt ?? null, mtime: start.mtime, lines: start.lines ?? null },
+            ancestors: canon,
+            children,
           }
         }
 

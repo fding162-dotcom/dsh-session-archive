@@ -44,6 +44,42 @@ if (process.argv[2] === '--heads') {
   process.exit(0)
 }
 
+// --edges 模式：只捞每个会话开头的「接续块」——新会话一开，插件会往它嘴里塞一段
+// 「最近这几个会话」，那段文字会落进它自己的事件流。所以块里带着上一代（或最近几代）
+// 的 id，以及这条事件的时间。会话链就是拿它配出来的。
+if (process.argv[2] === '--edges') {
+  const files = process.argv.slice(3)
+  const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+  const out = []
+  for (const f of files) {
+    try {
+      const text = zlib.zstdDecompressSync(fs.readFileSync(f)).toString('utf8')
+      const lines = text.split('\n')
+      let blockTime = null
+      let candidates = []
+      const max = Math.min(lines.length, 6000)
+      for (let i = 0; i < max; i++) {
+        const l = lines[i]
+        if (!l) continue
+        // 只认注入块的开头两句：光搜「会话接续」四个字会撞上源码、文档、聊天记录里的引用。
+        if (l.indexOf('【会话接续】你是一个新会话') < 0 && l.indexOf('【接着上次】最近这几个会话') < 0) continue
+        const ids = [...new Set((l.match(UUID) || []).map((x) => x.toLowerCase()))]
+        if (!ids.length) continue
+        let ev = null
+        try { ev = JSON.parse(l) } catch {}
+        blockTime = (ev && ev.time) || null
+        candidates = ids
+        break
+      }
+      out.push({ file: f, blockTime, candidates })
+    } catch (e) {
+      out.push({ file: f, error: String((e && e.message) || e) })
+    }
+  }
+  process.stdout.write(JSON.stringify(out))
+  process.exit(0)
+}
+
 const SINGLE = new Set(['做', '跑', '写', '好', '快', '来', '查', '看', '试', '改', '装', '删', '发', '问', '读', '想', '停', '换', '再', '对', '行', '嗯', '唔', '开', '修', '弄', '收', '记', '等', '走'])
 
 function shortCount(reasoning) {
