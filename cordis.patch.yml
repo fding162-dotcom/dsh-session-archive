@@ -1,0 +1,10 @@
+- insert:
+    - id: xiaolian-session-archive
+      name: 'dsh-session-archive'
+      config:
+        # 目标工作区（不填就用当前进程 cwd）
+        workspace: 'D:/deepseek AI'
+        # 不填默认 ~/.dsh/sessions
+        sessionsRoot: ''
+        # read/digest 默认最多回多少条
+        maxTail: 80
