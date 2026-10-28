@@ -25,28 +25,56 @@ DSH 的会话是独立的：开一个新会话，它不知道自己之前在哪�
 2. **开新会话会失忆。** 新会话不知道自己是谁、刚才在干什么。`digest` 一次给出对方最后说的话、最后做的事、停在哪。
 3. **归档之后就找不到。** DSH 的「归档」只是打标记，文件还在原地——插件照读不误。
 
-## 快速开始
+## 快速开始（推荐：一键脚本）
 
-```bash
-# 1) 拿到插件（放到任意位置）
-git clone https://github.com/fding162-dotcom/dsh-session-archive.git ~/plugins/dsh-session-archive
+Windows 用户在插件目录里跑：
 
-# 2) 备份 profile
-cp ~/.dsh/profiles/desktop/package.json ~/.dsh/profiles/desktop/package.json.bak
-
-# 3) 改 profile 的 package.json
-#    dsh.profile.bundles 里加   "dsh-session-archive"
-#    dependencies 里加          "dsh-session-archive": "link:<插件目录的绝对路径>"
-#    （Windows 也可以在 node_modules 下建一个 junction 指向插件目录）
-
-# 4) 重启 DSH
+```powershell
+.\install.ps1
 ```
 
-重启后工具 `session_archive` 出现，另外会往系统提示里注入一行「新会话先 digest」的提醒（见下）。
+它会自动：备份你的 profile → 把插件加进 `bundles` 和 `dependencies` → 在 `node_modules` 下建 junction → 告诉你怎么回滚。
+**改错一个字符 DSH 就可能起不来，所以这一步强烈建议交给脚本。**
+
+然后**完全退出 DSH 再打开**（不是切标签页），工具 `session_archive` 就会出现，同时会往系统提示里加一行「新会话先 digest」。
+
+- 想装到别的 profile：`.\install.ps1 -Profile web`（`ls ~/.dsh/profiles` 看有哪些）
+- 想卸载：`.\install.ps1 -Uninstall`（只摘链接和登记，**不碰任何会话文件**）
+- 脚本只改一个文件：`<profile>/package.json`，改之前会存一份 `.bak-时间戳`
+
+### 手动安装（macOS / Linux，或者你想自己来）
+
+```bash
+git clone https://github.com/fding162-dotcom/dsh-session-archive.git ~/plugins/dsh-session-archive
+
+# 备份
+cp ~/.dsh/profiles/desktop/package.json ~/.dsh/profiles/desktop/package.json.bak
+
+# 改 profile/package.json：
+#   dsh.profile.bundles 里加   "dsh-session-archive"
+#   dependencies 里加          "dsh-session-archive": "link:/绝对路径/plugins/dsh-session-archive"
+
+# 建软链（macOS/Linux）
+ln -s /绝对路径/plugins/dsh-session-archive ~/.dsh/profiles/desktop/node_modules/dsh-session-archive
+```
+
+重启 DSH 生效。
 
 > **依赖的 node 从哪来**：默认用 DSH 自己的进程（`process.execPath`），不需要系统 PATH 里有 node。只有在配置里写了 `nodePath` 才改用它。
 
 > **工作区怎么定**：默认用当前进程的 cwd；想固定到某个目录，在 `cordis.patch.yml` 里填 `workspace`。如果那个目录在 `~/.dsh/sessions` 下找不到对应会话，插件会退回列出**所有**工作区的会话，并在返回里说明——这是为了防止路径写错时完全没线索。
+
+## 装完出问题怎么办
+
+| 现象 | 先看这里 |
+|---|---|
+| 重启后没有 `session_archive` 工具 | ① profile 名对不对（`ls ~/.dsh/profiles`）② 完全退出重开，不是只刷新页面 ③ 插件目录里 `index.js` 在不在 |
+| DSH 起不来 / 报错 | 把 `package.json.bak-时间戳` 覆盖回 `package.json`，就回到装之前 |
+| `list` 说没找到会话 | 当前工作区还没有会话，或者 `workspace` 填成了别的目录 |
+| 第一次 `list` 有点慢 | 正常：要逐个解压会话头取时间，之后有缓存（`~/.dsh/session-archive-cache.json`），第二次就快了 |
+| 会话超过 60MB 读不了 | 防止一次读爆内存，单会话压缩包有上限；这种会话会明确报错而不是卡死 |
+
+> 插件只读 `~/.dsh/sessions` 下的文件，**从不写入**。卸载后你的会话一条都不会少。
 
 ## 输出上限
 
