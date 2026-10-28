@@ -6,7 +6,7 @@ const ctx = {
   get: (n) => (n === 'tools' ? { register: (e) => { cap.t = e; return () => {} } } : undefined),
   effect: (fn) => { try { return fn() } catch {} },
 }
-apply(ctx, { workspace: 'D:/deepseek AI' })
+apply(ctx, { workspace: process.cwd() })
 const tool = cap.t
 
 const cases = [
