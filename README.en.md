@@ -84,6 +84,16 @@ The response always states which session the archive belongs to, and when you pa
 
 A single response is hard-capped at **12,000 characters**: `list` shows at most 50 sessions, `stats` the last 14 days, `search` at most 30 hits — anything beyond is truncated and the remainder is reported. Long output can never blow up your context.
 
+## Known limitations (good starting points for contributors)
+
+1. **The startup snapshot is computed once, at DSH boot.** The 5 entries in the system prompt are generated when the plugin loads; opening another window in the same process still shows that boot-time snapshot. Making it live would require hooking DSH's session-creation event, which I haven't confirmed exists.
+2. **Requires Node.js 22.15+ on the system.** DSH ships as Electron and its runtime cannot execute scripts; without node the plugin falls back to a single-frame decoder (incomplete data, with an explicit warning).
+3. **A single compressed session above 60 MB is not read**, to avoid blowing up memory.
+4. **If the workspace directory can't be found, it falls back to listing all workspaces** — so a wrong path still gives you a clue instead of nothing.
+5. **`-` in paths collides with the path separator** in DSH's own escaping (`D:-b\c` and `D:\c` map to the same name). That's DSH's rule; the plugin just follows it.
+6. **Reading a session that is being written** may return an incomplete snapshot (during DSH's rewrite); it now says so.
+7. **The one-command installer is Windows-only**; macOS/Linux need manual profile editing.
+
 ## Troubleshooting
 
 | symptom | check |
