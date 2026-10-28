@@ -375,12 +375,12 @@ function buildTool(config = {}) {
     description:
       '会话档案库：把同一工作区的旧 DSH 会话当储存区，读上一个会话里发生过什么。' +
       '用于长会话退化（单字循环、上下文过长）后开新会话接续：先 list 看有哪些会话，再 digest 取摘要（对方说过什么、最后在做什么、退化程度），' +
-      'read 取更细的对话，search 按关键词找。旧会话只读不写。',
+      'timeline 按时间列出最近几个会话、每个带最后一句和最后动作（想知道「刚才在做什么」用这个），' + 'read 取更细的对话，search 按关键词找。旧会话只读不写。',
     parameters: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        action: { type: 'string', enum: ['list', 'digest', 'read', 'search', 'stats', 'live'], description: 'list 列会话 / digest 摘要 / read 读对话 / search 搜关键词 / stats 总览 / live 看最近哪些会话活着' },
+        action: { type: 'string', enum: ['list', 'timeline', 'digest', 'read', 'search', 'stats', 'live'], description: 'list 列会话 / timeline 时间线（每个会话带最后一句和最后动作）/ digest 摘要 / read 读对话 / search 搜关键词 / stats 总览 / live 看最近哪些会话活着' },
         sessionId: { type: 'string', description: '会话 id（可带 session- 前缀）；不填时 digest/read 会跳过最新那个（通常是当前会话），取上一个' },
         count: { type: 'number', description: 'digest 里带几条对话/动作，read 里取几条；默认 12/10/40' },
         query: { type: 'string', description: 'search 的关键词' },
@@ -450,6 +450,18 @@ function buildTool(config = {}) {
             for (const u of s.lastUsers) L.push(`   对方：${oneLine(u.text, 120)}`)
             if (s.lastAssistant) L.push(`   最后回复：${oneLine(s.lastAssistant, 120)}`)
             if (s.lastTools.length) L.push(`   最后动作：${s.lastTools.map((t) => t.name).join('、')}`)
+          }
+          return text(clampText(L.join('\n')))
+        }
+        if (v.action === 'timeline') {
+          const L = [`时间线（最近 ${v.sessions.length} 个会话，新的在上）：`]
+          for (const s of v.sessions) {
+            const when = s.minutesAgo < 1 ? '刚刚' : s.minutesAgo < 60 ? `${s.minutesAgo} 分钟前` : `${Math.round(s.minutesAgo / 60)} 小时前`
+            L.push('')
+            L.push(`▸ ${when} · ${s.id} · ${s.turns} 轮 / ${s.events} 条事件`)
+            if (s.lastUser) L.push(`    对方：${s.lastUser}`)
+            if (s.lastAssistant) L.push(`    回复：${s.lastAssistant}`)
+            if (s.lastTool) L.push(`    最后动作：${s.lastTool}`)
           }
           return text(clampText(L.join('\n')))
         }
@@ -602,6 +614,31 @@ function buildTool(config = {}) {
             })
           }
           return { ok: true, action, minutes, sessions: out }
+        }
+
+        if (action === 'timeline') {
+          const sessions = listSessions(root, workspace)
+          const limit = Math.max(1, Math.min(Number(a.count) || 10, 20))
+          const now = Date.now()
+          const out = []
+          for (const s of sessions.slice(0, limit)) {
+            let d
+            try { d = loadSession(s.file, config) } catch { continue }
+            const lastUser = d.users.length ? d.users[d.users.length - 1] : null
+            const lastAsst = [...d.asst].reverse().find((x) => x.text)
+            const lastTool = d.tools.length ? d.tools[d.tools.length - 1] : null
+            out.push({
+              id: s.id,
+              mtime: s.mtime,
+              minutesAgo: Math.round((now - s.mtime) / 60000),
+              turns: d.asst.length ? Math.max(...d.asst.map((x) => x.turn)) : 0,
+              events: d.lines,
+              lastUser: lastUser ? oneLine(lastUser.text, 100) : '',
+              lastAssistant: lastAsst ? oneLine(lastAsst.text, 100) : '',
+              lastTool: lastTool ? lastTool.name : '',
+            })
+          }
+          return { ok: true, action, sessions: out }
         }
 
         if (action === 'digest') {

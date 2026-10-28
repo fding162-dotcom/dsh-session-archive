@@ -57,6 +57,7 @@ Tool name: `session_archive`
 | action | does | when |
 |---|---|---|
 | `list` | all sessions in this workspace: id / start time / last activity / size / event count; ★ marks the newest | you don't know the previous session's id |
+| `timeline` | **time line**: the most recent N sessions, each with the user's last line, the last reply and the last tool call | "what was I just doing?" at a glance |
 | `digest` | summary: start, turns, degradation check, last things the user said, last actions taken | first thing when taking over |
 | `read` | last N messages in time order | you need details |
 | `search` | keyword search across sessions; `context: N` adds N lines before/after | "did I ever mention this?" |
